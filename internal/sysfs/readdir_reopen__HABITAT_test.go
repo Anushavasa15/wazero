@@ -37,4 +37,18 @@ func TestReaddirReopensDirectory__HABITAT(t *testing.T) {
 	// Second read must reflect newly created file
 	dirents, errno := f.Readdir(-1)
 	if errno != 0 {
-		t.Fatalf("second readdir failed: errno=%d", er
+		t.Fatalf("second readdir failed: errno=%d", errno)
+	}
+
+	found := false
+	for _, d := range dirents {
+		if d.Name == "second.txt" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("expected readdir to include file created after open")
+	}
+}
