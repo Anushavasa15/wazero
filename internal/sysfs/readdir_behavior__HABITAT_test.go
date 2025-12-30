@@ -1,35 +1,41 @@
 package sysfs
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestReaddirReopensDirectory__HABITAT(t *testing.T) {
+	ctx := context.Background()
 	dir := t.TempDir()
 
-	firstFile := filepath.Join(dir, "first.txt")
-	if err := os.WriteFile(firstFile, []byte("one"), 0o644); err != nil {
+	// Create initial file
+	if err := os.WriteFile(filepath.Join(dir, "first.txt"), []byte("one"), 0o644); err != nil {
 		t.Fatalf("failed to create first file: %v", err)
 	}
 
-	f, err := os.Open(dir)
-	if err != nil {
-		t.Fatalf("failed to open directory: %v", err)
-	}
-	defer f.Close()
+	// Use sysfs filesystem (this is critical)
+	fs := NewDirFS(dir)
 
-	_, err = f.Readdirnames(-1)
+	f, err := fs.OpenFile(ctx, ".", os.O_RDONLY, 0)
 	if err != nil {
+		t.Fatalf("failed to open directory via sysfs: %v", err)
+	}
+	defer f.Close(ctx)
+
+	// First readdir
+	if _, err := f.Readdirnames(-1); err != nil {
 		t.Fatalf("first readdir failed: %v", err)
 	}
 
-	secondFile := filepath.Join(dir, "second.txt")
-	if err := os.WriteFile(secondFile, []byte("two"), 0o644); err != nil {
+	// Create file AFTER directory open
+	if err := os.WriteFile(filepath.Join(dir, "second.txt"), []byte("two"), 0o644); err != nil {
 		t.Fatalf("failed to create second file: %v", err)
 	}
 
+	// Second readdir — this is what PR #2355 fixes
 	names, err := f.Readdirnames(-1)
 	if err != nil {
 		t.Fatalf("second readdir failed: %v", err)
@@ -39,6 +45,7 @@ func TestReaddirReopensDirectory__HABITAT(t *testing.T) {
 	for _, n := range names {
 		if n == "second.txt" {
 			found = true
+			break
 		}
 	}
 
